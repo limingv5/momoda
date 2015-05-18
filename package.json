@@ -18,5 +18,9 @@
   "bugs": {
     "url": "https://github.com/limingv5/momoda/issues"
   },
-  "homepage": "https://github.com/limingv5/momoda"
+  "homepage": "https://github.com/limingv5/momoda",
+  "dependencies": {
+    "juicer": "~0.6.9-stable",
+    "mikronode": "~0.3.3"
+  }
 }
