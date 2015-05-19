@@ -1,6 +1,6 @@
 {
   "name": "momoda",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "controller for Router OS",
   "main": "index.js",
   "scripts": {
@@ -20,7 +20,9 @@
   },
   "homepage": "https://github.com/limingv5/momoda",
   "dependencies": {
+    "async": "~0.9.0",
     "juicer": "~0.6.9-stable",
-    "mikronode": "~0.3.3"
+    "mikronode": "~0.3.3",
+    "qrcode-npm": "~0.0.3"
   }
 }

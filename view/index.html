@@ -1,0 +1,63 @@
+<link type="text/css" rel="stylesheet" href="/~css/index.css">
+<script src="/~js/jquery-2.1.4.min.js" type="text/javascript"></script>
+
+<div class="server">
+  <h1>开发机：${serverIP}</h1>
+
+  <div>
+    {@each hosts as host, domain}
+      ${domain}
+    {@/each}
+
+    &minus;&gt;
+
+    127.0.0.1
+  </div>
+
+  {@if qr}
+    $${qr}
+  {@/if}
+</div>
+
+{@if routerIP}
+<div class="device">
+  <h1>
+    目标设备
+    <span class="del">清空</span>
+  </h1>
+
+  <ul>
+    {@each clientList as client}
+      <li>
+        ${client.src}
+        <span class="del" nat-id="${client.id}">删除</span>
+      </li>
+    {@/each}
+  </ul>
+
+  <script type="text/javascript" src="/~js/del_client.js"></script>
+
+  <div>
+    {@each addressList as ip}
+    ${ip}
+    {@/each}
+
+    &minus;&gt;
+
+    ${serverIP}
+  </div>
+
+
+  <h2>主动添加</h2>
+  <form action="/~ui/pair" method="post" target="_blank">
+    <input type="text" name="clientIP" placeholder="请输入目标设备IP">
+    <input type="submit" value="提交">
+  </form>
+</div>
+{@/if}
+
+{@if routerIP}
+<div class="router">
+  <h1>路由器：${routerIP}</h1>
+</div>
+{@/if}
