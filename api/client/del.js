@@ -1,6 +1,6 @@
 var ROS = require("mikronode");
 
-exports = module.exports = function (req, param, cb) {
+module.exports = function (req, param, cb) {
   if (req.body.id && req.body.id.length) {
     var connection = new ROS(param.ip, param.username, param.password, {timeout: 6});
     connection.closeOnDone(true);

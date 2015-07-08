@@ -1,14 +1,14 @@
 var ROS = require("../lib/ros");
 var async = require("async");
 
-module.exports = function (ip, velocity, cb) {
+module.exports = function (ip, v_up, v_down, cb) {
   var ros = new ROS();
   ros.action(function (chan) {
     var item = "/queue/simple";
     var obj = {
       name: ip,
       target: ip,
-      "max-limit": velocity+'/'+velocity
+      "max-limit": v_up + '/' + v_down
     };
 
     var waterfallArr = [
