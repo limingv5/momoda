@@ -1,6 +1,6 @@
 {
   "name": "momoda",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "controller for Router OS",
   "main": "index.js",
   "scripts": {
