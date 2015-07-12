@@ -28,6 +28,7 @@
     "fetch-agent": "~0.4.0",
     "iconv-lite": "~0.4.10",
     "ip": "~0.3.3",
+    "is-utf8": "~0.2.0",
     "mikronode": "~0.3.3",
     "mime-types": "~2.1.2",
     "plug-base": "~0.8.1",
