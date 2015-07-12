@@ -21,32 +21,6 @@ if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
 
 var currentClientIP = null;
 
-var bindIP = function (req, res) {
-  var flag = false;
-
-  if (req.info.query && req.info.query.client) {
-    currentClientIP = req.info.query.client;
-  }
-  else {
-    currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
-    flag = true;
-  }
-
-  momoda.bind(ipLib.address(), currentClientIP, function () {
-    wss.virtual(currentClientIP);
-    if (flag) {
-      wss.broadcast({
-        type: "ui",
-        event: "client.bind",
-        data: {
-          client: currentClientIP
-        }
-      });
-    }
-    res.end(JSON.stringify({bind: currentClientIP}));
-  });
-};
-
 var wss = dojiUI.quickStart(9000, {
   "/rootca": function (req, res) {
     var rootCAPath = server.getRootCAPath();
@@ -58,12 +32,34 @@ var wss = dojiUI.quickStart(9000, {
     res.end(fs.readFileSync(rootCAPath, {encoding: null}));
   },
   "/client/clear": function (req, res) {
-    momoda.clear(ipLib.address(), function () {
-      
+    //momoda.clear(ipLib.address(), function () {
+    //
+    //});
+  },
+  "/client/bind": function (req, res) {
+    var needReBind = true;
+
+    if (req.info.query && req.info.query.client) {
+      currentClientIP = req.info.query.client;
+      needReBind = false;
+    }
+    else {
+      currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
+    }
+
+    momoda.bind(ipLib.address(), currentClientIP, function () {
+      wss.virtual(currentClientIP);
+      wss.broadcast({
+        type: "ui",
+        event: "client.view",
+        data:{
+          client: currentClientIP,
+          bind: needReBind
+        }
+      });
+      res.end(JSON.stringify({bind: currentClientIP}));
     });
   },
-  "/client/bind": bindIP,
-  "/qrcode/bind": bindIP,
   "/speed": function (req, res) {
     var buff = [];
     req.on("data", function (chunk) {
