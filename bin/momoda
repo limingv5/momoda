@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+
+var server = require("plug-base").parser();
+var fetch = require("fetch-agent");
+var zlib = require("zlib");
+var dojiUI = require("doji-ui");
+var qs = require("querystring");
+var mime = require("mime-types");
+var url = require("url");
+var path = require("path");
+var iconv = require("iconv-lite");
+var momoda = require("../index.js");
+var ipLib = require("ip");
+var fs = require("fs");
+var request = require('request');
+
+var currentClientIP = null;
+
+var wss = dojiUI.quickStart(9000, {
+  "/qrcode/bind": function (req, res) {
+    var clientIP = req.connection.remoteAddress.replace(/.+\:/, '');
+    currentClientIP = clientIP;
+    momoda.bind(ipLib.address(), clientIP, function () {
+      wss.virtual(currentClientIP);
+      res.end("bind IP: " + currentClientIP);
+    });
+  },
+  "/qrcode/rootca": function (req, res) {
+    var rootCAPath = server.getRootCAPath();
+    var rootca = path.basename(rootCAPath);
+    res.writeHead(200, {
+      "Content-Type": mime.lookup(rootca),
+      "Content-Disposition": "attachment;filename=" + rootca
+    });
+    res.end(fs.readFileSync(rootCAPath, {encoding: null}));
+  },
+  "/pc/bind": function (req, res) {
+    if (req.info.query && req.info.query.client) {
+      var clientIP = req.info.query.client;
+      currentClientIP = clientIP;
+      momoda.bind(ipLib.address(), clientIP, function () {
+        wss.virtual(currentClientIP);
+        res.end();
+      });
+    }
+    else {
+      res.end();
+    }
+  },
+  "/speed": function (req, res) {
+    var buff = [];
+    req.on("data", function (chunk) {
+      buff.push(chunk);
+    });
+    req.on("end", function () {
+      var v = qs.parse(Buffer.concat(buff).toString());
+      if (currentClientIP && (v.up || v.down)) {
+        momoda.speed(currentClientIP, v, function () {
+          res.end(JSON.stringify({code: 0}));
+        });
+      }
+      else {
+        res.end(JSON.stringify({code: 500}));
+      }
+    });
+
+    res.end();
+  }
+});
+
+server
+  .use(function (req, res, next) {
+    req.time = (new Date()).valueOf();
+
+    if (req.headers['if-modified-since']) {
+      req.headers['if-modified-since'] = null;
+      delete req.headers['if-modified-since'];
+    }
+
+    fetch.proxy(
+      req, res,
+
+      function onSuccess(err, buffer, nsres) {
+        res.time = (new Date()).valueOf();
+        res.headers = nsres.headers || {};
+        res.statusCode = nsres.statusCode;
+        res.buffer = buffer;
+
+        next();
+      },
+
+      function onError(err) {
+        console.log(err.code);
+
+        res.time = (new Date()).valueOf();
+
+        next();
+      }
+    );
+  })
+  .end(function (req, res) {
+    var gunzipResBuf = res.buffer;
+
+    var reqInfo = url.parse(req.url, true);
+    reqInfo.protocol = reqInfo.protocol || (req.connection.encrypted ? "https:" : "http:");
+    reqInfo.host = reqInfo.host || req.headers.host;
+    reqInfo.hostname = (reqInfo.host || '').split(':')[0];
+    reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
+
+    if (res.headers && res.headers['content-encoding']) {
+      console.log(res.headers)
+      if (res.headers['content-encoding'].match(/gzip/i)) {
+        gunzipResBuf = zlib.gunzipSync(res.buffer);
+      } else if (res.headers['content-encoding'].match(/deflate/i)) {
+        gunzipResBuf = zlib.inflateSync(res.buffer);
+      }
+    }
+
+    var charset = (res.headers && res.headers['content-type'] || '').match(/charset\=([^\;]+)\;*/i);
+    charset = charset && charset[1] ? charset[1] : 'UTF-8';
+    var parsed = null;
+    try {
+      parsed = iconv.decode(gunzipResBuf, charset);
+    }
+    catch(e) {
+      parsed = gunzipResBuf.toString();
+    }
+
+    var resExtname = '.' + mime.extension((res.headers||{})['content-type'] || 'application/octet-stream');
+    var extname = path.extname(reqInfo.pathname);
+    if (!mime.lookup(extname)) {
+      extname = '';
+    }
+    if(reqInfo.search.match(/^\?{2}/)) {
+      extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
+    }
+    if (!extname) {
+      extname = resExtname;
+    }
+    if(reqInfo.query && (reqInfo.query['jsonp'] || reqInfo.query['callback'])) {
+      extname = '.js';
+    }
+
+    var mock = {
+      req: {
+        headers: req.headers || {},
+        cookies: req.headers.cookies || '',
+        query: req.query,
+        search: qs.stringify(req.query),
+        body: {
+          // source
+          source: ""
+        }
+      },
+      res: {
+        headers: res.headers || {},
+        body: {
+          size: Buffer.byteLength(res.buffer, charset),
+          extname: extname,
+          source: "TODO",
+          parsed: parsed
+        }
+      },
+      times: {
+        'wait': '',
+        'download': '',
+        'req': req.time,
+        'during': res.time - req.time
+      },
+      extname: extname,
+      remote: currentClientIP || req.clientIP,
+      url: url.format(reqInfo),
+      method: req.method.toUpperCase(),
+      statusCode: res.statusCode
+    };
+
+    wss.broadcast({
+      type: 'ui',
+      event: 'network.add',
+      data: mock
+    });
+
+    var postUrl = process.argv[2];
+    if (postUrl) {
+      var form = {
+        url: mock.url,
+        netType: 0,
+        ip: currentClientIP || req.clientIP,
+        req: JSON.stringify({
+          headers: req.headers,
+          time: req.time
+        }),
+        resp: JSON.stringify({
+          headers: res.headers,
+          time: res.time,
+          code: res.statusCode
+        })
+      };
+      if (["api.m.taobao.com", "api.waptest.taobao.com", "api.wapa.taobao.com"].indexOf(reqInfo.host) != -1) {
+        form.body = parsed;
+      }
+      request.post({
+        url: postUrl,//'http://juwlt.ju.taobao.net:8080/wlqc/MmdNativeJson?callback=333&_input_charset=utf-8',
+        form: form
+      }, function (err, httpResponse, body) {});
+    }
+  })
+  .listen(9080, 9443);
