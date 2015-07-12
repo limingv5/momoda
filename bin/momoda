@@ -14,30 +14,41 @@ var fs = require("fs");
 var request = require("request");
 var momoda = require("../index.js");
 
+if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
+  console.log("Please connect Special WIFI!");
+  return;
+}
+
 var currentClientIP = null;
 
-var wss = dojiUI.quickStart(9000, {
-  "/qrcode/bind": function (req, res) {
-    var clientIP = req.connection.remoteAddress.replace(/.+\:/, '');
-    var needReBind = true;
-    if (req.info.query && req.info.query.client) {
-      clientIP = req.info.query.client;
-      needReBind = false;
-    }
-    currentClientIP = clientIP;
-    momoda.bind(ipLib.address(), clientIP, function () {
-      wss.virtual(currentClientIP);
-      needReBind && wss.broadcast({
+var bindIP = function (req, res) {
+  var flag = false;
+
+  if (req.info.query && req.info.query.client) {
+    currentClientIP = req.info.query.client;
+  }
+  else {
+    currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
+    flag = true;
+  }
+
+  momoda.bind(ipLib.address(), currentClientIP, function () {
+    wss.virtual(currentClientIP);
+    if (flag) {
+      wss.broadcast({
         type: "ui",
         event: "client.bind",
         data: {
           client: currentClientIP
         }
       });
-      res.end("bind IP: " + currentClientIP);
-    });
-  },
-  "/qrcode/rootca": function (req, res) {
+    }
+    res.end(JSON.stringify({bind: currentClientIP}));
+  });
+};
+
+var wss = dojiUI.quickStart(9000, {
+  "/rootca": function (req, res) {
     var rootCAPath = server.getRootCAPath();
     var rootca = path.basename(rootCAPath);
     res.writeHead(200, {
@@ -46,6 +57,13 @@ var wss = dojiUI.quickStart(9000, {
     });
     res.end(fs.readFileSync(rootCAPath, {encoding: null}));
   },
+  "/client/clear": function (req, res) {
+    momoda.clear(ipLib.address(), function () {
+      
+    });
+  },
+  "/client/bind": bindIP,
+  "/qrcode/bind": bindIP,
   "/speed": function (req, res) {
     var buff = [];
     req.on("data", function (chunk) {
@@ -65,6 +83,12 @@ var wss = dojiUI.quickStart(9000, {
 
     res.end();
   }
+});
+
+momoda.clients(ipLib.address(), function (clients) {
+  clients.forEach(function (i) {
+    wss.virtual(i['src-address']);
+  });
 });
 
 server
@@ -121,6 +145,7 @@ server
       parsed = iconv.decode(gunzipResBuf, charset);
     }
     catch (e) {
+      console.log(res.headers);
       parsed = gunzipResBuf.toString();
     }
 

@@ -16,10 +16,10 @@ module.exports = function (serverIP, clientIP, cb) {
     };
 
     var waterfallArr = [
-      //function (callback) {
-      //  ros.remove(chan, item, {"to-addresses": obj["to-addresses"]}, callback);
-      //},
       function (callback) {
+        ros.remove(chan, item, {"to-addresses": obj["to-addresses"]}, callback);
+      },
+      function (chan, callback) {
         ros.remove(chan, item, {"src-address": obj["src-address"]}, callback);
       },
       function (chan, callback) {
