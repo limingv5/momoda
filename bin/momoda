@@ -30,7 +30,7 @@ var wss = dojiUI.quickStart(9000, {
       needReBind && wss.broadcast({
         type: "ui",
         event: "client.bind",
-        data:{
+        data: {
           client: currentClientIP
         }
       });
@@ -129,6 +129,7 @@ server
     if (!mime.lookup(extname)) {
       extname = '';
     }
+
     if (reqInfo.search.match(/^\?{2}/)) {
       extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
     }
