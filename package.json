@@ -1,6 +1,6 @@
 {
   "name": "momoda",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "controller for Router OS",
   "main": "index.js",
   "bin": {
@@ -24,14 +24,14 @@
   "homepage": "https://github.com/limingv5/momoda",
   "dependencies": {
     "async": "~0.9.0",
-    "doji-ui": "~0.1.0",
-    "fetch-agent": "~0.4.0",
+    "doji-ui": "~0.1.1",
+    "fetch-agent": "~0.4.1",
     "iconv-lite": "~0.4.10",
     "ip": "~0.3.3",
     "is-utf8": "~0.2.0",
     "mikronode": "~0.3.3",
     "mime-types": "~2.1.2",
-    "plug-base": "~0.8.1",
+    "plug-base": "~0.8.2",
     "request": "~2.58.0"
   }
 }

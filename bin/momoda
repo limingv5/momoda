@@ -88,7 +88,7 @@ momoda.clients(ipLib.address(), function (clients) {
   });
 });
 
-var analysis = function (req, res) {
+function analysis (req, res) {
   var gunzipResBuf = res.buffer;
   var parsed = null;
 
@@ -102,6 +102,9 @@ var analysis = function (req, res) {
   var extname = path.extname(reqInfo.pathname);
   var ct = (res.headers || {})['content-type'];
   var ajax = (req.headers || {})['x-requested-with'];
+  if (ajax || /text|css|javascript|json|xml/.test(ct)) {
+    charset = "UTF-8";
+  }
   if (ct) {
     var matched = ct.match(/charset\=([^\;]+)\b/i);
     if (matched && matched[1]) {
@@ -116,9 +119,6 @@ var analysis = function (req, res) {
     if (resExtname) {
       extname = '.' + resExtname;
     }
-  }
-  if (ajax || /text|css|javascript|json|xml/.test(ct)) {
-    charset = "UTF-8";
   }
 
   if (reqInfo.search.match(/^\?{2}/)) {
@@ -210,7 +210,7 @@ var analysis = function (req, res) {
     }, function (err, httpResponse, body) {
     });
   }
-};
+}
 
 server
   .use(function (req, res, next) {
@@ -219,6 +219,10 @@ server
     if (req.headers['if-modified-since']) {
       req.headers['if-modified-since'] = null;
       delete req.headers['if-modified-since'];
+    }
+    if (req.headers['if-none-match']) {
+      req.headers['if-none-match'] = null;
+      delete req.headers['if-none-match'];
     }
 
     if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
@@ -235,7 +239,7 @@ server
         else {
           req.body.raw = iconv.decode(content, "gbk");
         }
-        
+
         if (/json/.test(req.headers['content-type'])) {
           req.body.json = JSON.parse(req.body.raw);
         }
