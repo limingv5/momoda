@@ -24,7 +24,7 @@
   "homepage": "https://github.com/limingv5/momoda",
   "dependencies": {
     "async": "~0.9.0",
-    "doji-ui": "~1.0.0",
+    "doji-ui": "~0.1.0",
     "fetch-agent": "~0.4.0",
     "iconv-lite": "~0.4.10",
     "ip": "~0.3.3",
