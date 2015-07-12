@@ -112,6 +112,8 @@ server
         console.log(err.code);
 
         res.time = (new Date()).valueOf();
+        res.statusCode = 500;
+        res.error = true;
 
         next();
       }
@@ -119,13 +121,6 @@ server
   })
   .end(function (req, res) {
     var gunzipResBuf = res.buffer;
-
-    var reqInfo = url.parse(req.url, true);
-    reqInfo.protocol = reqInfo.protocol || (req.connection.encrypted ? "https:" : "http:");
-    reqInfo.host = reqInfo.host || req.headers.host;
-    reqInfo.hostname = (reqInfo.host || '').split(':')[0];
-    reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
-
     if (res.headers && res.headers['content-encoding']) {
       if (res.headers['content-encoding'].match(/gzip/i)) {
         gunzipResBuf = zlib.gunzipSync(res.buffer);
@@ -134,23 +129,35 @@ server
       }
     }
 
-    var charset = (res.headers && res.headers['content-type'] || '').match(/charset\=([^\;]+)\;*/i);
-    charset = charset && charset[1] ? charset[1] : 'UTF-8';
-    var parsed = null;
-    try {
-      parsed = iconv.decode(gunzipResBuf, charset);
+    var charset;
+    if (res.headers && res.headers['content-type']) {
+      var ct = res.headers['content-type'];
+      charset = mime.charset(ct);
+      var matched = ct.match(/charset\=([^\;]+)\;*/i);
+      if (matched) {
+        charset = matched && matched[1] ? matched[1] : 'UTF-8';
+      }
     }
-    catch (e) {
-      console.log(res.headers);
-      parsed = gunzipResBuf.toString();
+    var parsed = null;
+    if (!res.error && gunzipResBuf && charset) {
+      try {
+        parsed = iconv.decode(gunzipResBuf, charset);
+      }
+      catch (e) {
+        parsed = gunzipResBuf.toString();
+      }
     }
 
+    var reqInfo = url.parse(req.url, true);
+    reqInfo.protocol = reqInfo.protocol || (req.connection.encrypted ? "https:" : "http:");
+    reqInfo.host = reqInfo.host || req.headers.host;
+    reqInfo.hostname = (reqInfo.host || '').split(':')[0];
+    reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
     var resExtname = '.' + mime.extension((res.headers || {})['content-type'] || 'application/octet-stream');
     var extname = path.extname(reqInfo.pathname);
     if (!mime.lookup(extname)) {
       extname = '';
     }
-
     if (reqInfo.search.match(/^\?{2}/)) {
       extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
     }
@@ -187,8 +194,14 @@ server
       remote: currentClientIP || req.clientIP,
       url: url.format(reqInfo),
       method: req.method.toUpperCase(),
-      statusCode: res.statusCode
+      statusCode: res.statusCode || 500
     };
+
+    if (/sdk|apple/.test(req.headers.host)) {
+
+      console.log(mock)
+
+    }
 
     wss.broadcast({
       type: "ui",
