@@ -221,7 +221,7 @@ server
       delete req.headers['if-modified-since'];
     }
 
-    if (req.headers && req.headers['content-type'] && /form\-/.test(req.headers['content-type'])) {
+    if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
       var buff = [];
       req.body = {};
       req.on("data", function (chunk) {
@@ -234,6 +234,10 @@ server
         }
         else {
           req.body.raw = iconv.decode(content, "gbk");
+        }
+        
+        if (/json/.test(req.headers['content-type'])) {
+          req.body.json = JSON.parse(req.body.raw);
         }
       });
     }
