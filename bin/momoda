@@ -19,9 +19,21 @@ var currentClientIP = null;
 var wss = dojiUI.quickStart(9000, {
   "/qrcode/bind": function (req, res) {
     var clientIP = req.connection.remoteAddress.replace(/.+\:/, '');
+    var needReBind = true;
+    if (req.info.query && req.info.query.client) {
+      clientIP = req.info.query.client;
+      needReBind = false;
+    }
     currentClientIP = clientIP;
     momoda.bind(ipLib.address(), clientIP, function () {
       wss.virtual(currentClientIP);
+      needReBind && wss.broadcast({
+        type: "ui",
+        event: "client.bind",
+        data:{
+          client: currentClientIP
+        }
+      });
       res.end("bind IP: " + currentClientIP);
     });
   },
@@ -33,19 +45,6 @@ var wss = dojiUI.quickStart(9000, {
       "Content-Disposition": "attachment;filename=" + rootca
     });
     res.end(fs.readFileSync(rootCAPath, {encoding: null}));
-  },
-  "/pc/bind": function (req, res) {
-    if (req.info.query && req.info.query.client) {
-      var clientIP = req.info.query.client;
-      currentClientIP = clientIP;
-      momoda.bind(ipLib.address(), clientIP, function () {
-        wss.virtual(currentClientIP);
-        res.end();
-      });
-    }
-    else {
-      res.end();
-    }
   },
   "/speed": function (req, res) {
     var buff = [];
@@ -108,7 +107,6 @@ server
     reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
 
     if (res.headers && res.headers['content-encoding']) {
-      console.log(res.headers)
       if (res.headers['content-encoding'].match(/gzip/i)) {
         gunzipResBuf = zlib.gunzipSync(res.buffer);
       } else if (res.headers['content-encoding'].match(/deflate/i)) {
@@ -122,22 +120,22 @@ server
     try {
       parsed = iconv.decode(gunzipResBuf, charset);
     }
-    catch(e) {
+    catch (e) {
       parsed = gunzipResBuf.toString();
     }
 
-    var resExtname = '.' + mime.extension((res.headers||{})['content-type'] || 'application/octet-stream');
+    var resExtname = '.' + mime.extension((res.headers || {})['content-type'] || 'application/octet-stream');
     var extname = path.extname(reqInfo.pathname);
     if (!mime.lookup(extname)) {
       extname = '';
     }
-    if(reqInfo.search.match(/^\?{2}/)) {
+    if (reqInfo.search.match(/^\?{2}/)) {
       extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
     }
     if (!extname) {
       extname = resExtname;
     }
-    if(reqInfo.query && (reqInfo.query['jsonp'] || reqInfo.query['callback'])) {
+    if (reqInfo.query && (reqInfo.query['jsonp'] || reqInfo.query['callback'])) {
       extname = '.js';
     }
 
@@ -147,17 +145,13 @@ server
         cookies: req.headers.cookies || '',
         query: req.query,
         search: qs.stringify(req.query),
-        body: {
-          // source
-          source: ""
-        }
+        body: {}
       },
       res: {
         headers: res.headers || {},
         body: {
           size: Buffer.byteLength(res.buffer, charset),
           extname: extname,
-          source: "TODO",
           parsed: parsed
         }
       },
@@ -175,8 +169,8 @@ server
     };
 
     wss.broadcast({
-      type: 'ui',
-      event: 'network.add',
+      type: "ui",
+      event: "network.add",
       data: mock
     });
 
@@ -200,9 +194,10 @@ server
         form.body = parsed;
       }
       request.post({
-        url: postUrl,//'http://juwlt.ju.taobao.net:8080/wlqc/MmdNativeJson?callback=333&_input_charset=utf-8',
+        url: postUrl,
         form: form
-      }, function (err, httpResponse, body) {});
+      }, function (err, httpResponse, body) {
+      });
     }
   })
   .listen(9080, 9443);
