@@ -9,7 +9,6 @@ var mime = require("mime-types");
 var url = require("url");
 var path = require("path");
 var iconv = require("iconv-lite");
-var isUtf8 = require("is-utf8");
 var ipLib = require("ip");
 var fs = require("fs");
 var request = require("request");
@@ -250,12 +249,10 @@ server
       });
       req.on("end", function () {
         var content = Buffer.concat(buff);
-        if (isUtf8(content)) {
+        try {
           req.body.raw = content.toString();
         }
-        else {
-          req.body.raw = iconv.decode(content, "gbk");
-        }
+        catch (e) {}
 
         if (/json/.test(req.headers['content-type'])) {
           req.body.json = JSON.parse(req.body.raw);
