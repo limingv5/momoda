@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-var server = require("plug-base").parser();
+var server = require("plug-base").pure();
 var fetch = require("fetch-agent");
 var zlib = require("zlib");
 var dojiUI = require("doji-ui");
@@ -13,7 +13,16 @@ var isUtf8 = require("is-utf8");
 var ipLib = require("ip");
 var fs = require("fs");
 var request = require("request");
+var argv = require("yargs").argv;
 var momoda = require("../index.js");
+
+try {
+  var updateNotifier = require("update-notifier");
+  var packageJSON = require(__dirname + "/../package.json");
+  updateNotifier({pkg: packageJSON}).notify();
+}
+catch (e) {
+}
 
 if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
   console.log("Please connect Special WIFI!");
@@ -21,8 +30,13 @@ if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
 }
 
 var currentClientIP = null;
+var PORT = argv.port || argv.p || 9999;
+var postUrl = argv.url || argv.u;
+if (!/https?:\/\//.test(postUrl)) {
+  postUrl = null;
+}
 
-var wss = dojiUI.quickStart(9000, {
+var wss = dojiUI.quickStart(PORT, {
   "/rootca": function (req, res) {
     var rootCAPath = server.getRootCAPath();
     var rootca = path.basename(rootCAPath);
@@ -33,9 +47,10 @@ var wss = dojiUI.quickStart(9000, {
     res.end(fs.readFileSync(rootCAPath, {encoding: null}));
   },
   "/client/clear": function (req, res) {
-    //momoda.clear(ipLib.address(), function () {
-    //
-    //});
+    momoda.clear(ipLib.address(), function () {
+      wss.clear();
+      res.end(JSON.stringify({code: 0}));
+    });
   },
   "/client/bind": function (req, res) {
     var needReBind = true;
@@ -53,7 +68,7 @@ var wss = dojiUI.quickStart(9000, {
       wss.broadcast({
         type: "ui",
         event: "client.view",
-        data:{
+        data: {
           client: currentClientIP,
           bind: needReBind
         }
@@ -88,7 +103,7 @@ momoda.clients(ipLib.address(), function (clients) {
   });
 });
 
-function analysis (req, res) {
+function analysis(req, res) {
   var gunzipResBuf = res.buffer;
   var parsed = null;
 
@@ -185,7 +200,6 @@ function analysis (req, res) {
     data: mock
   });
 
-  var postUrl = process.argv[2];
   if (postUrl) {
     var form = {
       url: mock.url,
@@ -201,7 +215,7 @@ function analysis (req, res) {
         code: res.statusCode
       })
     };
-    if (["api.m.taobao.com", "api.waptest.taobao.com", "api.wapa.taobao.com"].indexOf(reqInfo.host) != -1) {
+    if (parsed) {
       form.body = parsed;
     }
     request.post({
@@ -211,6 +225,9 @@ function analysis (req, res) {
     });
   }
 }
+
+var open = require("open");
+open("http://" + ipLib.address() + ':' + PORT + "/doji/ui/");
 
 server
   .use(function (req, res, next) {
