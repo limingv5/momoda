@@ -48,6 +48,7 @@ var wss = dojiUI.quickStart(PORT, {
   "/client/clear": function (req, res) {
     momoda.clear(ipLib.address(), function () {
       wss.clear();
+      currentClientIP = null;
       res.end(JSON.stringify({code: 0}));
     });
   },
