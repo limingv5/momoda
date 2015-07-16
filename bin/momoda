@@ -29,7 +29,11 @@ if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
 }
 
 var currentClientIP = null;
+var currentNetMode = "full";
+
 var PORT = argv.port || argv.p || 9999;
+var HTTP_PORT = argv.http || 9080;
+var HTTPS_PORT = argv.https || 9443;
 var postUrl = argv.url || argv.u;
 if (!/https?:\/\//.test(postUrl)) {
   postUrl = null;
@@ -49,6 +53,7 @@ var wss = dojiUI.quickStart(PORT, {
     momoda.clear(ipLib.address(), function () {
       wss.clear();
       currentClientIP = null;
+      currentNetMode = "full";
       res.end(JSON.stringify({code: 0}));
     });
   },
@@ -63,7 +68,7 @@ var wss = dojiUI.quickStart(PORT, {
       currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
     }
 
-    momoda.bind(ipLib.address(), currentClientIP, function () {
+    momoda.bind(ipLib.address(), currentClientIP, HTTP_PORT, HTTPS_PORT, function () {
       wss.virtual(currentClientIP);
       wss.broadcast({
         type: "ui",
@@ -83,8 +88,9 @@ var wss = dojiUI.quickStart(PORT, {
     });
     req.on("end", function () {
       var v = qs.parse(Buffer.concat(buff).toString());
-      if (currentClientIP && (v.up || v.down)) {
-        momoda.speed(currentClientIP, v, function () {
+      if (v.up || v.down) {
+        momoda.speed(ipLib.address(), v, function () {
+          currentNetMode = v.mode || "full";
           res.end(JSON.stringify({code: 0}));
         });
       }
@@ -203,7 +209,7 @@ function analysis(req, res) {
   if (postUrl) {
     var form = {
       url: mock.url,
-      netType: 0,
+      netType: currentNetMode || "full",
       ip: currentClientIP || req.clientIP,
       req: JSON.stringify({
         headers: req.headers,
@@ -221,7 +227,7 @@ function analysis(req, res) {
     request.post({
       url: postUrl,
       form: form
-    }, function (err, httpResponse, body) {
+    }, function (err, res, body) {
     });
   }
 }
@@ -286,4 +292,4 @@ server
       }
     );
   })
-  .listen(9080, 9443);
+  .listen(HTTP_PORT, HTTPS_PORT);
