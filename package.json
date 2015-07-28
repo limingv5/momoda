@@ -1,7 +1,7 @@
 {
   "name": "momoda",
-  "version": "0.1.1",
-  "description": "controller for Router OS",
+  "version": "0.1.2",
+  "description": "Transparent Proxy via Router OS",
   "main": "index.js",
   "bin": {
     "momoda": "./bin/momoda"
@@ -24,7 +24,7 @@
   "homepage": "https://github.com/limingv5/momoda",
   "dependencies": {
     "async": "~0.9.0",
-    "doji-ui": "~0.1.4",
+    "doji-ui": "~0.1.5",
     "fetch-agent": "~0.4.1",
     "iconv-lite": "~0.4.10",
     "ip": "~0.3.3",

@@ -34,9 +34,29 @@ var currentNetMode = "full";
 var PORT = argv.port || argv.p || 9999;
 var HTTP_PORT = argv.http || 9080;
 var HTTPS_PORT = argv.https || 9443;
+var GH = argv.gh || argv.g || 0;
 var postUrl = argv.url || argv.u;
+var viewUrl = argv.view || argv.v;
 if (!/https?:\/\//.test(postUrl)) {
   postUrl = null;
+}
+if (!/https?:\/\//.test(viewUrl)) {
+  viewUrl = null;
+}
+
+var userHome = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
+var config = path.join(userHome, "momoda.json");
+if (fs.existsSync(config)) {
+  var conf = require(config);
+  postUrl = postUrl || conf.post;
+  viewUrl = viewUrl || conf.view;
+}
+else {
+  fs.writeFileSync(config, JSON.stringify({
+    post: postUrl || '',
+    view: viewUrl || ''
+  }, null, 2));
+  fs.chmod(config, 0777);
 }
 
 var wss = dojiUI.quickStart(PORT, {
@@ -208,6 +228,8 @@ function analysis(req, res) {
 
   if (postUrl) {
     var form = {
+      gh: GH,
+      host: reqInfo.host || '',
       url: mock.url,
       netType: currentNetMode || "full",
       ip: currentClientIP || req.clientIP,
@@ -233,6 +255,9 @@ function analysis(req, res) {
 }
 
 var open = require("open");
+if (viewUrl) {
+  open(viewUrl);
+}
 open("http://" + ipLib.address() + ':' + PORT + "/doji/ui/");
 
 server
