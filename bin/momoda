@@ -45,16 +45,29 @@ if (!/https?:\/\//.test(viewUrl)) {
 }
 
 var userHome = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
-var config = path.join(userHome, "momoda.json");
+var dir = path.join(userHome, ".momoda");
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir);
+  fs.chmod(dir, 0777);
+}
+var config = path.join(dir, "config.json");
 if (fs.existsSync(config)) {
   var conf = require(config);
+  PORT = PORT || conf.port;
+  HTTP_PORT = HTTP_PORT || conf.http_port;
+  HTTPS_PORT = HTTPS_PORT || conf.https_port;
+  GH = GH || conf.gh;
   postUrl = postUrl || conf.post;
   viewUrl = viewUrl || conf.view;
 }
 else {
   fs.writeFileSync(config, JSON.stringify({
     post: postUrl || '',
-    view: viewUrl || ''
+    view: viewUrl || '',
+    port: PORT,
+    http_port: HTTP_PORT,
+    https_port: HTTPS_PORT,
+    gh: GH
   }, null, 2));
   fs.chmod(config, 0777);
 }
@@ -226,7 +239,7 @@ function analysis(req, res) {
     data: mock
   });
 
-  if (postUrl) {
+  if (postUrl && /https?:\/\//.test(postUrl)) {
     var form = {
       gh: GH,
       host: reqInfo.host || '',
