@@ -11,7 +11,7 @@ module.exports = function (serverIP, clientIP, HTTP_PORT, HTTPS_PORT, cb) {
       action: "dst-nat",
       protocol: "tcp",
       //log: "yes",
-      "dst-address": "!42.156.153.0/24",
+      "dst-address-list": "!ignore",
       "src-address": clientIP,
       "to-addresses": serverIP
     };

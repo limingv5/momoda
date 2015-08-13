@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-var server = require("plug-base").pure();
 var fetch = require("fetch-agent");
 var zlib = require("zlib");
 var dojiUI = require("doji-ui");
@@ -12,135 +11,9 @@ var iconv = require("iconv-lite");
 var ipLib = require("ip");
 var fs = require("fs");
 var request = require("request");
+var fp = require("find-free-port");
 var argv = require("yargs").argv;
 var momoda = require("../index.js");
-
-try {
-  var updateNotifier = require("update-notifier");
-  var packageJSON = require(__dirname + "/../package.json");
-  updateNotifier({pkg: packageJSON}).notify();
-}
-catch (e) {
-}
-
-if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
-  console.log("Please connect Special WIFI!");
-  return;
-}
-
-var currentClientIP = null;
-var currentNetMode = "full";
-
-var PORT = argv.port || argv.p || 9999;
-var HTTP_PORT = argv.http || 9080;
-var HTTPS_PORT = argv.https || 9443;
-var GH = argv.gh || argv.g || 0;
-var postUrl = argv.url || argv.u;
-var viewUrl = argv.view || argv.v;
-if (!/https?:\/\//.test(postUrl)) {
-  postUrl = null;
-}
-if (!/https?:\/\//.test(viewUrl)) {
-  viewUrl = null;
-}
-
-var userHome = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
-var dir = path.join(userHome, ".momoda");
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
-  fs.chmod(dir, 0777);
-}
-var config = path.join(dir, "config.json");
-if (fs.existsSync(config)) {
-  var conf = require(config);
-  PORT = PORT || conf.port;
-  HTTP_PORT = HTTP_PORT || conf.http_port;
-  HTTPS_PORT = HTTPS_PORT || conf.https_port;
-  GH = GH || conf.gh;
-  postUrl = postUrl || conf.post;
-  viewUrl = viewUrl || conf.view;
-}
-else {
-  fs.writeFileSync(config, JSON.stringify({
-    post: postUrl || '',
-    view: viewUrl || '',
-    port: PORT,
-    http_port: HTTP_PORT,
-    https_port: HTTPS_PORT,
-    gh: GH
-  }, null, 2));
-  fs.chmod(config, 0777);
-}
-
-var wss = dojiUI.quickStart(PORT, {
-  "/rootca": function (req, res) {
-    var rootCAPath = server.getRootCAPath();
-    var rootca = path.basename(rootCAPath);
-    res.writeHead(200, {
-      "Content-Type": mime.lookup(rootca),
-      "Content-Disposition": "attachment;filename=" + rootca
-    });
-    res.end(fs.readFileSync(rootCAPath, {encoding: null}));
-  },
-  "/client/clear": function (req, res) {
-    momoda.clear(ipLib.address(), function () {
-      wss.clear();
-      currentClientIP = null;
-      currentNetMode = "full";
-      res.end(JSON.stringify({code: 0}));
-    });
-  },
-  "/client/bind": function (req, res) {
-    var needReBind = true;
-
-    if (req.info.query && req.info.query.client) {
-      currentClientIP = req.info.query.client;
-      needReBind = false;
-    }
-    else {
-      currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
-    }
-
-    momoda.bind(ipLib.address(), currentClientIP, HTTP_PORT, HTTPS_PORT, function () {
-      wss.virtual(currentClientIP);
-      wss.broadcast({
-        type: "ui",
-        event: "client.view",
-        data: {
-          client: currentClientIP,
-          bind: needReBind
-        }
-      });
-      res.end(JSON.stringify({bind: currentClientIP}));
-    });
-  },
-  "/speed": function (req, res) {
-    var buff = [];
-    req.on("data", function (chunk) {
-      buff.push(chunk);
-    });
-    req.on("end", function () {
-      var v = qs.parse(Buffer.concat(buff).toString());
-      if (v.up || v.down) {
-        momoda.speed(ipLib.address(), v, function () {
-          currentNetMode = v.mode || "full";
-          res.end(JSON.stringify({code: 0}));
-        });
-      }
-      else {
-        res.end(JSON.stringify({code: 500}));
-      }
-    });
-
-    res.end();
-  }
-});
-
-momoda.clients(ipLib.address(), function (clients) {
-  clients.forEach(function (i) {
-    wss.virtual(i['src-address']);
-  });
-});
 
 function analysis(req, res) {
   var gunzipResBuf = res.buffer;
@@ -227,7 +100,7 @@ function analysis(req, res) {
       'during': res.time - req.time
     },
     extname: extname,
-    remote: currentClientIP || req.clientIP,
+    remote: req.clientIP || '127.0.0.1',
     url: url.format(reqInfo),
     method: req.method.toUpperCase(),
     statusCode: res.statusCode || 500
@@ -245,7 +118,7 @@ function analysis(req, res) {
       host: reqInfo.host || '',
       url: mock.url,
       netType: currentNetMode || "full",
-      ip: currentClientIP || req.clientIP,
+      ip: req.clientIP || '127.0.0.1',
       req: JSON.stringify({
         headers: req.headers,
         time: req.time
@@ -267,67 +140,204 @@ function analysis(req, res) {
   }
 }
 
+try {
+  var updateNotifier = require("update-notifier");
+  var packageJSON = require(__dirname + "/../package.json");
+  updateNotifier({pkg: packageJSON}).notify();
+}
+catch (e) {
+}
+
+if (!/^192\.168\.88\.\d+/.test(ipLib.address())) {
+  console.log("Please connect Special WIFI!");
+  return;
+}
+
+var currentNetMode = "full";
+
+var PORT = argv.port || argv.p || 9999;
+var GH = argv.gh || argv.g || 0;
+var postUrl = argv.url || argv.u;
+var viewUrl = argv.view || argv.v;
+if (!/https?:\/\//.test(postUrl)) {
+  postUrl = null;
+}
+if (!/https?:\/\//.test(viewUrl)) {
+  viewUrl = null;
+}
+
+var userHome = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
+var dir = path.join(userHome, ".momoda");
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir);
+  fs.chmod(dir, 0777);
+}
+var config = path.join(dir, "config.json");
+if (fs.existsSync(config)) {
+  var conf = require(config);
+  PORT = PORT || conf.port;
+  GH = GH || conf.gh;
+  postUrl = postUrl || conf.post;
+  viewUrl = viewUrl || conf.view;
+}
+else {
+  fs.writeFileSync(config, JSON.stringify({
+    post: postUrl || '',
+    view: viewUrl || '',
+    port: PORT,
+    gh: GH
+  }, null, 2));
+  fs.chmod(config, 0777);
+}
+
+var clientsMap = {};
+
+var PlugBase = require("plug-base");
+var pureserver = PlugBase.pure();
+var wss = dojiUI.quickStart(PORT, {
+  "/rootca": function (req, res) {
+    var rootCAPath = pureserver.getRootCAPath();
+    var rootca = path.basename(rootCAPath);
+    res.writeHead(200, {
+      "Content-Type": mime.lookup(rootca),
+      "Content-Disposition": "attachment;filename=" + rootca
+    });
+    res.end(fs.readFileSync(rootCAPath, {encoding: null}));
+  },
+  "/client/clear": function (req, res) {
+    momoda.clear(ipLib.address(), function () {
+      wss.clear();
+      for (var server in clientsMap) {
+        clientsMap[server] = null;
+        delete clientsMap[server];
+      }
+      clientsMap = {};
+      currentNetMode = "full";
+      res.end(JSON.stringify({code: 0}));
+    });
+  },
+  "/client/bind": function (req, res) {
+    var currentClientIP = null;
+    if (req.info.query && req.info.query.client) {
+      currentClientIP = req.info.query.client;
+    }
+    else {
+      currentClientIP = req.connection.remoteAddress.replace(/.+\:/, '');
+    }
+
+    if (currentClientIP && !clientsMap[currentClientIP]) {
+      clientsMap[currentClientIP] = true;
+
+      fp(3000, 65535, "0.0.0.0", 2, function(err, HTTP_PORT, HTTPS_PORT) {
+        momoda.bind(ipLib.address(), currentClientIP, HTTP_PORT, HTTPS_PORT, function () {
+          wss.virtual(currentClientIP);
+          wss.broadcast({
+            type: "ui",
+            event: "client.view",
+            data: {
+              client: currentClientIP,
+              bind: true
+            }
+          });
+          res.end(JSON.stringify({bind: currentClientIP}));
+        });
+
+        clientsMap[currentClientIP] = PlugBase.pure();
+        clientsMap[currentClientIP]
+          .use(function (req, res, next) {
+            req.clientIP = currentClientIP;
+            next();
+          })
+          .use(function (req, res, next) {
+            req.time = (new Date()).valueOf();
+
+            if (req.headers['if-modified-since']) {
+              req.headers['if-modified-since'] = null;
+              delete req.headers['if-modified-since'];
+            }
+            if (req.headers['if-none-match']) {
+              req.headers['if-none-match'] = null;
+              delete req.headers['if-none-match'];
+            }
+
+            if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
+              var buff = [];
+              req.body = {};
+              req.on("data", function (chunk) {
+                buff.push(chunk);
+              });
+              req.on("end", function () {
+                var content = Buffer.concat(buff);
+                try {
+                  req.body.raw = content.toString();
+                }
+                catch (e) {}
+
+                if (/json/.test(req.headers['content-type'])) {
+                  req.body.json = JSON.parse(req.body.raw);
+                }
+              });
+            }
+
+            fetch.proxy(
+              req, res,
+
+              function onSuccess(err, buffer, nsres) {
+                res.time = (new Date()).valueOf();
+                res.headers = nsres.headers || {};
+                res.statusCode = nsres.statusCode;
+                res.buffer = buffer;
+
+                analysis(req, res);
+                next();
+              },
+
+              function onError(err) {
+                console.log(err.code);
+
+                res.time = (new Date()).valueOf();
+                res.statusCode = 500;
+                res.error = true;
+
+                analysis(req, res);
+                next();
+              }
+            );
+          })
+          .listen(HTTP_PORT, HTTPS_PORT);
+      });
+    }
+  },
+  "/speed": function (req, res) {
+    var buff = [];
+    req.on("data", function (chunk) {
+      buff.push(chunk);
+    });
+    req.on("end", function () {
+      var v = qs.parse(Buffer.concat(buff).toString());
+      if (v.up || v.down) {
+        momoda.speed(ipLib.address(), v, function () {
+          currentNetMode = v.mode || "full";
+          res.end(JSON.stringify({code: 0}));
+        });
+      }
+      else {
+        res.end(JSON.stringify({code: 500}));
+      }
+    });
+
+    res.end();
+  }
+});
+
+momoda.clients(ipLib.address(), function (clients) {
+  clients.forEach(function (i) {
+    wss.virtual(i['src-address']);
+  });
+});
+
 var open = require("open");
 if (viewUrl) {
   open(viewUrl);
 }
 open("http://" + ipLib.address() + ':' + PORT + "/doji/ui/");
-
-server
-  .use(function (req, res, next) {
-    req.time = (new Date()).valueOf();
-
-    if (req.headers['if-modified-since']) {
-      req.headers['if-modified-since'] = null;
-      delete req.headers['if-modified-since'];
-    }
-    if (req.headers['if-none-match']) {
-      req.headers['if-none-match'] = null;
-      delete req.headers['if-none-match'];
-    }
-
-    if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
-      var buff = [];
-      req.body = {};
-      req.on("data", function (chunk) {
-        buff.push(chunk);
-      });
-      req.on("end", function () {
-        var content = Buffer.concat(buff);
-        try {
-          req.body.raw = content.toString();
-        }
-        catch (e) {}
-
-        if (/json/.test(req.headers['content-type'])) {
-          req.body.json = JSON.parse(req.body.raw);
-        }
-      });
-    }
-
-    fetch.proxy(
-      req, res,
-
-      function onSuccess(err, buffer, nsres) {
-        res.time = (new Date()).valueOf();
-        res.headers = nsres.headers || {};
-        res.statusCode = nsres.statusCode;
-        res.buffer = buffer;
-
-        analysis(req, res);
-        next();
-      },
-
-      function onError(err) {
-        console.log(err.code);
-
-        res.time = (new Date()).valueOf();
-        res.statusCode = 500;
-        res.error = true;
-
-        analysis(req, res);
-        next();
-      }
-    );
-  })
-  .listen(HTTP_PORT, HTTPS_PORT);
