@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-var fetch = require("fetch-agent");
-var zlib = require("zlib");
-var dojiUI = require("doji-ui");
-var qs = require("querystring");
-var mime = require("mime-types");
 var url = require("url");
 var path = require("path");
+var qs = require("querystring");
+var zlib = require("zlib");
+var fs = require("fs");
+var fetch = require("fetch-agent");
+var dojiUI = require("doji-ui");
+var mime = require("mime-types");
 var iconv = require("iconv-lite");
 var ipLib = require("ip");
-var fs = require("fs");
 var request = require("request");
 var fp = require("find-free-port");
 var argv = require("yargs").argv;
@@ -166,6 +166,16 @@ if (!/https?:\/\//.test(viewUrl)) {
   viewUrl = null;
 }
 
+var _ = argv._;
+if (_ && _.length && _.indexOf("jhs") != -1) {
+  if (!viewUrl) {
+    viewUrl = "http://juwlt.ju.taobao.net/mock/MmdInterface.htm";
+  }
+  if (!postUrl) {
+    postUrl = "http://juwlt.ju.taobao.net/mock/MmdNativeJson?_input_charset=utf-8";
+  }
+}
+
 var userHome = process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH;
 var dir = path.join(userHome, ".momoda");
 if (!fs.existsSync(dir)) {
@@ -306,6 +316,9 @@ var wss = dojiUI.quickStart(PORT, {
           })
           .listen(HTTP_PORT, HTTPS_PORT);
       });
+    }
+    else {
+      res.end();
     }
   },
   "/speed": function (req, res) {
