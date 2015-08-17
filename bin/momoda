@@ -78,22 +78,20 @@ function analysis(req, res) {
   if (!res.error && charset && res.headers) {
     var encoding = res.headers['content-encoding'];
 
-    if (res.headers && encoding) {
+    if (!req.isMock && res.headers && encoding) {
       if (encoding.match(/gzip/i)) {
-        gunzipResBuf = zlib.gunzipSync(res.buffer);
+        gunzipResBuf = zlib.gunzipSync(gunzipResBuf);
       }
       else if (encoding.match(/deflate/i)) {
-        gunzipResBuf = zlib.inflateSync(res.buffer);
+        gunzipResBuf = zlib.inflateSync(gunzipResBuf);
       }
     }
 
-    if (gunzipResBuf) {
-      try {
-        parsed = iconv.decode(gunzipResBuf, charset);
-      }
-      catch (e) {
-        parsed = gunzipResBuf.toString();
-      }
+    try {
+      parsed = iconv.decode(gunzipResBuf, charset);
+    }
+    catch (e) {
+      parsed = gunzipResBuf.toString();
     }
   }
 
@@ -292,41 +290,46 @@ var wss = dojiUI.quickStart(PORT, {
           })
           .plug(require("mockx"))
           .use(function (req, res, next) {
-            req.time = (new Date()).valueOf();
-
-            if (req.headers['if-modified-since']) {
-              req.headers['if-modified-since'] = null;
-              delete req.headers['if-modified-since'];
+            if (req.isMock) {
+              analysis(req, res);
             }
-            if (req.headers['if-none-match']) {
-              req.headers['if-none-match'] = null;
-              delete req.headers['if-none-match'];
-            }
+            else {
+              req.time = (new Date()).valueOf();
 
-            fetch.proxy(
-              req, res,
-
-              function onSuccess(err, buffer, nsres) {
-                res.time = (new Date()).valueOf();
-                res.headers = nsres.headers || {};
-                res.statusCode = nsres.statusCode;
-                res.buffer = buffer;
-
-                analysis(req, res);
-                next();
-              },
-
-              function onError(err) {
-                console.log(err.code);
-
-                res.time = (new Date()).valueOf();
-                res.statusCode = 500;
-                res.error = true;
-
-                analysis(req, res);
-                next();
+              if (req.headers['if-modified-since']) {
+                req.headers['if-modified-since'] = null;
+                delete req.headers['if-modified-since'];
               }
-            );
+              if (req.headers['if-none-match']) {
+                req.headers['if-none-match'] = null;
+                delete req.headers['if-none-match'];
+              }
+
+              fetch.proxy(
+                req, res,
+
+                function onSuccess(err, buffer, nsres) {
+                  res.time = (new Date()).valueOf();
+                  res.headers = nsres.headers || {};
+                  res.statusCode = nsres.statusCode;
+                  res.buffer = buffer;
+
+                  analysis(req, res);
+                  next();
+                },
+
+                function onError(err) {
+                  console.log(err.code);
+
+                  res.time = (new Date()).valueOf();
+                  res.statusCode = 500;
+                  res.error = true;
+
+                  analysis(req, res);
+                  next();
+                }
+              );
+            }
           })
           .listen(HTTP_PORT, HTTPS_PORT);
       });
