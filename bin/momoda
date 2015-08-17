@@ -5,6 +5,7 @@ var path = require("path");
 var qs = require("querystring");
 var zlib = require("zlib");
 var fs = require("fs");
+var QUERY = require("qs");
 var fetch = require("fetch-agent");
 var dojiUI = require("doji-ui");
 var mime = require("mime-types");
@@ -16,6 +17,25 @@ var argv = require("yargs").argv;
 var momoda = require("../index.js");
 
 function analysis(req, res) {
+  if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
+    var buff = [];
+    req.body = {};
+    req.on("data", function (chunk) {
+      buff.push(chunk);
+    });
+    req.on("end", function () {
+      var content = Buffer.concat(buff);
+      try {
+        req.body.raw = content.toString();
+      }
+      catch (e) {}
+
+      if (/json/.test(req.headers['content-type'])) {
+        req.body.json = JSON.parse(req.body.raw);
+      }
+    });
+  }
+
   var gunzipResBuf = res.buffer;
   var parsed = null;
 
@@ -182,6 +202,11 @@ if (!fs.existsSync(dir)) {
   fs.mkdirSync(dir);
   fs.chmod(dir, 0777);
 }
+var mockDir = path.join(dir, "mock");
+if (!fs.existsSync(mockDir)) {
+  fs.mkdirSync(mockDir);
+  fs.chmod(mockDir, 0777);
+}
 var config = path.join(dir, "config.json");
 if (fs.existsSync(config)) {
   var conf = require(config);
@@ -252,12 +277,20 @@ var wss = dojiUI.quickStart(PORT, {
           res.end(JSON.stringify({bind: currentClientIP}));
         });
 
-        clientsMap[currentClientIP] = PlugBase.pure();
-        clientsMap[currentClientIP]
+        var server = clientsMap[currentClientIP] = PlugBase.pure();
+        server.config(dir);
+        server.root(mockDir);
+        server
           .use(function (req, res, next) {
             req.clientIP = currentClientIP;
+            req.query = {};
+            var _get = url.parse(req.url).path.match(/([^\?])\?[^\?].*$/);
+            if (_get && _get[0]) {
+              req.query = QUERY.parse(_get[0].slice(2));
+            }
             next();
           })
+          .plug(require("mockx"))
           .use(function (req, res, next) {
             req.time = (new Date()).valueOf();
 
@@ -268,25 +301,6 @@ var wss = dojiUI.quickStart(PORT, {
             if (req.headers['if-none-match']) {
               req.headers['if-none-match'] = null;
               delete req.headers['if-none-match'];
-            }
-
-            if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
-              var buff = [];
-              req.body = {};
-              req.on("data", function (chunk) {
-                buff.push(chunk);
-              });
-              req.on("end", function () {
-                var content = Buffer.concat(buff);
-                try {
-                  req.body.raw = content.toString();
-                }
-                catch (e) {}
-
-                if (/json/.test(req.headers['content-type'])) {
-                  req.body.json = JSON.parse(req.body.raw);
-                }
-              });
             }
 
             fetch.proxy(
