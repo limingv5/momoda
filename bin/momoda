@@ -16,148 +16,6 @@ var fp = require("find-free-port");
 var argv = require("yargs").argv;
 var momoda = require("../index.js");
 
-function analysis(req, res) {
-  if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
-    var buff = [];
-    req.body = {};
-    req.on("data", function (chunk) {
-      buff.push(chunk);
-    });
-    req.on("end", function () {
-      var content = Buffer.concat(buff);
-      try {
-        req.body.raw = content.toString();
-      }
-      catch (e) {}
-
-      if (/json/.test(req.headers['content-type'])) {
-        req.body.json = JSON.parse(req.body.raw);
-      }
-    });
-  }
-
-  var gunzipResBuf = res.buffer;
-  var parsed = null;
-
-  var reqInfo = url.parse(req.url, true);
-  reqInfo.protocol = reqInfo.protocol || (req.connection.encrypted ? "https:" : "http:");
-  reqInfo.host = reqInfo.host || req.headers.host;
-  reqInfo.hostname = (reqInfo.host || '').split(':')[0];
-  reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
-
-  var charset;
-  var extname = path.extname(reqInfo.pathname);
-  var ct = (res.headers || {})['content-type'];
-  var ajax = (req.headers || {})['x-requested-with'];
-  if (ajax || /text|css|javascript|json|xml/.test(ct)) {
-    charset = "UTF-8";
-  }
-  if (ct) {
-    var matched = ct.match(/charset\=([^\;]+)\b/i);
-    if (matched && matched[1]) {
-      if (/javascript/.test(ct)) {
-        extname = ".js";
-      }
-      charset = matched[1];
-      ct = ct.replace(/;.+/, '');
-    }
-
-    var resExtname = mime.extension(ct);
-    if (resExtname) {
-      extname = '.' + resExtname;
-    }
-  }
-
-  if (reqInfo.search.match(/^\?{2}/)) {
-    extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
-  }
-  if (reqInfo.query && (reqInfo.query['jsonp'] || reqInfo.query['callback'])) {
-    extname = '.js';
-  }
-
-  if (!res.error && charset && res.headers) {
-    var encoding = res.headers['content-encoding'];
-
-    if (!req.isMock && res.headers && encoding) {
-      if (encoding.match(/gzip/i)) {
-        gunzipResBuf = zlib.gunzipSync(gunzipResBuf);
-      }
-      else if (encoding.match(/deflate/i)) {
-        gunzipResBuf = zlib.inflateSync(gunzipResBuf);
-      }
-    }
-
-    try {
-      parsed = iconv.decode(gunzipResBuf, charset);
-    }
-    catch (e) {
-      parsed = gunzipResBuf.toString();
-    }
-  }
-
-  var mock = {
-    req: {
-      headers: req.headers || {},
-      cookies: req.headers.cookies || '',
-      query: req.query,
-      search: qs.stringify(req.query),
-      body: req.body || {}
-    },
-    res: {
-      headers: res.headers || {},
-      body: {
-        size: Buffer.byteLength(res.buffer, charset),
-        extname: extname,
-        parsed: parsed || "不支持预览"
-      }
-    },
-    times: {
-      'wait': '',
-      'download': '',
-      'req': req.time,
-      'during': res.time - req.time
-    },
-    extname: extname,
-    remote: req.clientIP || '127.0.0.1',
-    url: url.format(reqInfo),
-    method: req.method.toUpperCase(),
-    statusCode: res.statusCode || 500
-  };
-
-  wss.broadcast({
-    type: "ui",
-    event: "network.add",
-    data: mock
-  });
-
-  if (postUrl && /https?:\/\//.test(postUrl)) {
-    var form = {
-      gh: GH,
-      host: reqInfo.host || '',
-      url: mock.url,
-      netType: currentNetMode || "full",
-      ip: req.clientIP || '127.0.0.1',
-      req: JSON.stringify({
-        headers: req.headers,
-        time: req.time
-      }),
-      resp: JSON.stringify({
-        headers: res.headers,
-        time: res.time,
-        code: res.statusCode
-      })
-    };
-    if (parsed) {
-      form.body = parsed;
-    }
-    request.post({
-      url: postUrl,
-      form: form
-    }, function (err, res, body) {
-    });
-  }
-}
-
 try {
   var updateNotifier = require("update-notifier");
   var packageJSON = require(__dirname + "/../package.json");
@@ -261,7 +119,7 @@ var wss = dojiUI.quickStart(PORT, {
     if (currentClientIP && !clientsMap[currentClientIP]) {
       clientsMap[currentClientIP] = true;
 
-      fp(3000, 65535, "0.0.0.0", 2, function(err, HTTP_PORT, HTTPS_PORT) {
+      fp(3000, 65535, "0.0.0.0", 2, function (err, HTTP_PORT, HTTPS_PORT) {
         momoda.bind(ipLib.address(), currentClientIP, HTTP_PORT, HTTPS_PORT, function () {
           wss.virtual(currentClientIP);
           wss.broadcast({
@@ -290,8 +148,9 @@ var wss = dojiUI.quickStart(PORT, {
           })
           .plug(require("mockx"))
           .use(function (req, res, next) {
-            if (req.isMock) {
-              analysis(req, res);
+            if (res.mockHeaders) {
+              res.headers = res.mockHeaders;
+              next();
             }
             else {
               req.time = (new Date()).valueOf();
@@ -314,7 +173,6 @@ var wss = dojiUI.quickStart(PORT, {
                   res.statusCode = nsres.statusCode;
                   res.buffer = buffer;
 
-                  analysis(req, res);
                   next();
                 },
 
@@ -325,10 +183,150 @@ var wss = dojiUI.quickStart(PORT, {
                   res.statusCode = 500;
                   res.error = true;
 
-                  analysis(req, res);
                   next();
                 }
               );
+            }
+          })
+          .use(function (req, res) {
+            if (req.headers && req.headers['content-type'] && /xml|json|form/.test(req.headers['content-type'])) {
+              var buff = [];
+              req.body = {};
+              req.on("data", function (chunk) {
+                buff.push(chunk);
+              });
+              req.on("end", function () {
+                var content = Buffer.concat(buff);
+                try {
+                  req.body.raw = content.toString();
+                }
+                catch (e) {
+                }
+
+                if (/json/.test(req.headers['content-type'])) {
+                  req.body.json = JSON.parse(req.body.raw);
+                }
+              });
+            }
+
+            var gunzipResBuf = res.buffer;
+            var parsed = null;
+
+            var reqInfo = url.parse(req.url, true);
+            reqInfo.protocol = reqInfo.protocol || (req.connection.encrypted ? "https:" : "http:");
+            reqInfo.host = reqInfo.host || req.headers.host;
+            reqInfo.hostname = (reqInfo.host || '').split(':')[0];
+            reqInfo.port = reqInfo.port || (req.connection.encrypted ? "443" : "80");
+
+            var charset;
+            var extname = path.extname(reqInfo.pathname);
+            var ct = (res.headers || {})['content-type'];
+            var ajax = (req.headers || {})['x-requested-with'];
+            if (ajax || /text|css|javascript|json|xml/.test(ct)) {
+              charset = "utf-8";
+            }
+            if (ct) {
+              var matched = ct.match(/charset\=([^\;]+)\b/i);
+              if (matched && matched[1]) {
+                if (/javascript/.test(ct)) {
+                  extname = ".js";
+                }
+                charset = matched[1];
+                ct = ct.replace(/;.+/, '');
+              }
+
+              var resExtname = mime.extension(ct);
+              if (resExtname) {
+                extname = '.' + resExtname;
+              }
+            }
+            if (reqInfo.query && (reqInfo.query['jsonp'] || reqInfo.query['callback'])) {
+              extname = ".js";
+            }
+            if (reqInfo.search.match(/^\?{2}/)) {
+              extname = path.extname(reqInfo.search.split(/[\&\?]+/)[1]);
+            }
+
+            if (!res.error && charset && res.headers) {
+              var encoding = res.headers['content-encoding'];
+
+              if (!req.isMock && res.headers && encoding) {
+                if (encoding.match(/gzip/i)) {
+                  gunzipResBuf = zlib.gunzipSync(gunzipResBuf);
+                }
+                else if (encoding.match(/deflate/i)) {
+                  gunzipResBuf = zlib.inflateSync(gunzipResBuf);
+                }
+              }
+
+              try {
+                parsed = iconv.decode(gunzipResBuf, charset);
+              }
+              catch (e) {
+                parsed = gunzipResBuf.toString();
+              }
+            }
+
+            var mock = {
+              req: {
+                headers: req.headers || {},
+                cookies: req.headers.cookies || '',
+                query: req.query,
+                search: qs.stringify(req.query),
+                body: req.body || {}
+              },
+              res: {
+                headers: res.headers || {},
+                body: {
+                  size: Buffer.byteLength(res.buffer, charset),
+                  extname: extname,
+                  parsed: parsed || "不支持预览"
+                }
+              },
+              times: {
+                wait: '',
+                download: '',
+                req: req.time,
+                during: res.time - req.time
+              },
+              extname: extname,
+              remote: req.clientIP || '127.0.0.1',
+              url: url.format(reqInfo),
+              method: req.method.toUpperCase(),
+              statusCode: res.statusCode || 500
+            };
+
+            wss.broadcast({
+              type: "ui",
+              event: "network.add",
+              data: mock
+            });
+
+            if (postUrl && /https?:\/\//.test(postUrl)) {
+              var form = {
+                gh: GH,
+                host: reqInfo.host || '',
+                url: mock.url,
+                netType: currentNetMode || "full",
+                ip: req.clientIP || '127.0.0.1',
+                req: JSON.stringify({
+                  headers: req.headers,
+                  time: req.time
+                }),
+                resp: JSON.stringify({
+                  headers: res.headers,
+                  time: res.time,
+                  code: res.statusCode
+                })
+              };
+              if (parsed) {
+                form.body = parsed;
+              }
+              request.post({
+                url: postUrl,
+                form: form
+              }, function (err, res, body) {
+              });
             }
           })
           .listen(HTTP_PORT, HTTPS_PORT);
