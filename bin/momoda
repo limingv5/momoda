@@ -81,6 +81,25 @@ else {
   fs.chmod(config, 0777);
 }
 
+if (viewUrl) {
+  dojiUI.configTab([
+    {
+      name: 'analysis',
+      title: '统计视图',
+      viewUrl: viewUrl,
+      height: 20000
+    }
+  ]);
+}
+dojiUI.configTab([
+  {
+    name: 'help',
+    title: '帮助',
+    viewUrl: "http://act.ju.taobao.com/market/ju/momoda.php",
+    height: 5200
+  }
+]);
+
 var clientsMap = {};
 
 var PlugBase = require("plug-base");
@@ -365,7 +384,4 @@ momoda.clients(ipLib.address(), function (clients) {
 });
 
 var open = require("open");
-if (viewUrl) {
-  open(viewUrl);
-}
 open("http://" + ipLib.address() + ':' + PORT + "/doji/ui/");
