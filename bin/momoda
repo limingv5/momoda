@@ -85,7 +85,7 @@ if (viewUrl) {
   dojiUI.configTab([
     {
       name: 'analysis',
-      title: '统计视图',
+      title: '统计与分析',
       viewUrl: viewUrl,
       height: 20000
     }
