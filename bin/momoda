@@ -192,6 +192,7 @@ var wss = dojiUI.quickStart(PORT, {
                   res.statusCode = nsres.statusCode;
                   res.buffer = buffer;
 
+                  res.end();
                   next();
                 },
 
@@ -202,6 +203,7 @@ var wss = dojiUI.quickStart(PORT, {
                   res.statusCode = 500;
                   res.error = true;
 
+                  res.end();
                   next();
                 }
               );
